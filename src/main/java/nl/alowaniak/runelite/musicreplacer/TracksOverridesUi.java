@@ -31,6 +31,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+import java.util.Arrays;
 
 import static net.runelite.http.api.RuneLiteAPI.GSON;
 import static nl.alowaniak.runelite.musicreplacer.MusicReplacerConfig.CONFIG_GROUP;
@@ -56,6 +57,8 @@ class TracksOverridesUi
 	private TooltipManager tooltipManager;
 	@Inject
 	private ChatboxPanelManager chatboxPanelManager;
+	@Inject
+	private MusicReplacerPlugin musicReplacer;
 
 	@Inject
 	private Tracks tracks;
@@ -188,6 +191,14 @@ class TracksOverridesUi
 
 	private void overrideByLocal(String trackName)
 	{
+		chatboxPanelManager.openTextMenuInput("Are you overriding with a single or multiple tracks?")
+		.option("Single.", () -> overrideByLocalSingle(trackName))
+		.option("Multiple.", () -> overrideByLocalMulti(trackName))
+		.build();
+	}
+
+	private void overrideByLocalSingle(String trackName)
+	{
 		SwingUtilities.invokeLater(() -> {
 			JFileChooser fileChooser = new JFileChooser();
 			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
@@ -205,7 +216,37 @@ class TracksOverridesUi
 			});
 			int status = fileChooser.showOpenDialog(client.getCanvas());
 			if (status == JFileChooser.APPROVE_OPTION) {
-				tracks.createOverride(trackName, fileChooser.getSelectedFile().toPath());
+				tracks.createOverride(trackName, false, 0, fileChooser.getSelectedFile().toPath());
+			}
+		});
+	}
+
+	private void overrideByLocalMulti(String trackName)
+	{
+		SwingUtilities.invokeLater(() -> {
+			JFileChooser fileChooser = new JFileChooser();
+			fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+			fileChooser.setMultiSelectionEnabled(true);
+			fileChooser.setFileFilter(new FileFilter() {
+				@Override
+				public boolean accept(File f) {
+					return f.isDirectory() || MusicPlayer.PLAYER_PER_EXT.keySet().stream().anyMatch(ext -> f.getName().endsWith(ext));
+				}
+				@Override
+				public String getDescription() {
+					return "Supported audio files";
+				}
+			});
+
+			int status = fileChooser.showOpenDialog(client.getCanvas());
+			if (status == JFileChooser.APPROVE_OPTION) {
+				File[] songsArray = fileChooser.getSelectedFiles();
+				if (songsArray.length > 3){
+					musicReplacer.chatMsg("Only 3 tracks allowed, ignoring the last " + (songsArray.length - 3) + ".");
+				}
+				for (int i = 0; i < Math.min(songsArray.length, 3); i++) {
+        			tracks.createOverride(trackName, true, i, songsArray[i].toPath());
+    			}
 			}
 		});
 	}
@@ -261,15 +302,16 @@ class TracksOverridesUi
 			trackPlayingWidget.setOnClickListener((JavaScriptCallback) e -> scrollToTrack(e.getSource().getText()));
 			trackPlayingWidget.setHasListener(true);
 
-			TrackOverride override = tracks.getOverride(trackPlayingWidget.getText());
-			if (override != null)
+			TrackOverride[] overrides = tracks.getOverride(trackPlayingWidget.getText());
+			if (overrides != null)
 			{
+				TrackOverride originOverride = overrides[0];
 				trackPlayingWidget.setFontId(OVERRIDE_FONT);
 
-				String origin = truncate(override.getOriginalPath(), 40);
+				String origin = truncate(originOverride.getOriginalPath(), 40);
 
 				StringBuilder tooltipTxt = new StringBuilder("From: " + origin + "</br>");
-				override.getAdditionalInfo().entrySet().stream()
+				originOverride.getAdditionalInfo().entrySet().stream()
 						.sorted(Map.Entry.comparingByKey(Comparator.comparing(String::length).thenComparing(String::compareTo)))
 						.forEach(e -> tooltipTxt.append(e.getKey()).append(": ").append(e.getValue()).append("</br>"));
 				Tooltip tooltip = new Tooltip(tooltipTxt.toString());

@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "MusicReplacerPluginTest",
+            "request": "launch",
+            "mainClass": "nl.alowaniak.runelite.musicreplacer.MusicReplacerPluginTest",
+            "vmArgs": "-ea",
+            "args": "--developer-mode"
+        }
+    ]
+}

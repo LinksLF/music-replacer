@@ -22,6 +22,8 @@ class TrackOverride
 	/**
 	 * The originalPath for a local override or the {@link SearchResult#id} for downloads
 	 */
+	boolean multiTrack;
+	int slot;
 	String originalPath;
 	boolean fromLocal;
 	Map<String, String> additionalInfo;

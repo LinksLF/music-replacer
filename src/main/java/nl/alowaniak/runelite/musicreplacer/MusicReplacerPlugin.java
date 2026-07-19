@@ -32,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -88,7 +89,10 @@ public class MusicReplacerPlugin extends Plugin
 	private MusicPlayer player;
 	private String actualCurTrack;
 	private boolean restoreActualCurTrack;
+	private TrackOverride[] listofTracks;
 	private TrackOverride trackToPlay;
+	private int[] shuffleOrder;
+	private int curSlot; 
 
 	private double fading;
 
@@ -96,6 +100,7 @@ public class MusicReplacerPlugin extends Plugin
 	protected void startUp()
 	{
 		eventBus.register(tracksOverridesUi);
+		log.warn("### MUSIC REPLACER TEST BUILD - VERSION CHECK 12345 ###");
 	}
 
 	@Provides
@@ -148,7 +153,34 @@ public class MusicReplacerPlugin extends Plugin
 			applyVolume();
 		}
 
-		TrackOverride newTrack = tracks.getOverride(curTrack);
+		TrackOverride[] listofTracks = tracks.getOverride(curTrack);
+		TrackOverride newTrack;
+
+		if (listofTracks == null)
+		{
+			newTrack = null;
+		}
+		else if (listofTracks.length > 1)
+		{
+			shuffleOrder = new int[listofTracks.length];
+			for (int i = 0; i < shuffleOrder.length; i++) shuffleOrder[i] = i;
+			Random rand = new Random();
+			for (int i = shuffleOrder.length - 1; i > 0; i--)
+			{
+				int j = rand.nextInt(i + 1);
+				int temp = shuffleOrder[i];
+				shuffleOrder[i] = shuffleOrder[j];
+				shuffleOrder[j] = temp;
+			}
+			curSlot = 0;
+			newTrack = listofTracks[shuffleOrder[0]];
+		}
+		else
+		{
+			shuffleOrder = null;
+			newTrack = listofTracks[0];
+		}
+
 		if (!Objects.equals(trackToPlay, newTrack))
 		{
 			trackToPlay = newTrack;
@@ -167,7 +199,7 @@ public class MusicReplacerPlugin extends Plugin
 		}
 		else if (player != null)
 		{
-			double volume = (musicConfig.getMusicVolume() - 1) / MAX_VOL;
+			double volume = (client.getMusicVolume() - 1) / MAX_VOL;
 			boolean actualTrackIsBeingOverruled = config.playOverridesToEnd() && actualCurTrack != null && trackToPlay != null && !actualCurTrack.equals(trackToPlay.getName());
 			if (actualTrackIsBeingOverruled && (volume <= 0 || !player.isPlaying()))
 			{
@@ -178,7 +210,16 @@ public class MusicReplacerPlugin extends Plugin
 				// Restart play if
 				// we switched from muted to on (mimic osrs behavior)
 				// or we ended and have loop enabled
-				player.play();
+				if (shuffleOrder != null && shuffleOrder.length > 1)
+				{
+					curSlot = (curSlot + 1) % shuffleOrder.length;
+					trackToPlay = listofTracks[shuffleOrder[curSlot]];
+					stopCurrentAndStartNew();
+				}
+				else
+				{
+					player.play();
+				}
 			}
 
 			applyVolume();
@@ -229,14 +270,14 @@ public class MusicReplacerPlugin extends Plugin
 
 		if (player == null)
 		{
-			int volume = (int) ((musicConfig.getMusicVolume() - 1) * multiplier);
+			int volume = (int) ((client.getMusicVolume() - 1) * multiplier);
 			clientThread.invokeLater(() -> client.setMusicVolume(Ints.constrainToRange(volume, 0, (int) MAX_VOL)));
 		}
 		else
 		{
 			if (player.isPlaying())
 			{
-				double volume = Doubles.constrainToRange((musicConfig.getMusicVolume() - 1) / MAX_VOL * multiplier, 0, 1);
+				double volume = Doubles.constrainToRange((client.getMusicVolume() - 1) / MAX_VOL * multiplier, 0, 1);
 				player.setVolume(volume);
 			}
 			clientThread.invokeLater(() -> client.setMusicVolume(0));

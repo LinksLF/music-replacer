@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.SortedSet;
@@ -96,7 +97,7 @@ class Tracks
 						// Ideally we filtered only files with an osrs track name, but music track enum is removed, let place responsibility on user
 						.forEach(e -> {
 							if (!config.skipAlreadyOverriddenWhenBulkOverride() || !overrideExists(e.getFilename())) {
-								createOverride(e.getFilename(), e.getPath());
+								createOverride(e.getFilename(), false, 0, e.getPath());
 							} else {
 								musicReplacer.chatMsg("Skipping " + e.getFilename() + ", already overridden.");
 							}
@@ -110,9 +111,9 @@ class Tracks
 		});
 	}
 
-    public void createOverride(String name, Path path)
+    public void createOverride(String name, boolean multiTrack, int slot, Path path)
 	{
-		createOverride(new TrackOverride(name, path.toString(), true, ImmutableMap.of()));
+		createOverride(new TrackOverride(name, multiTrack, slot, path.toString(), true, ImmutableMap.of()));
 	}
 
 	public void bulkCreateOverride(Preset preset) {
@@ -133,7 +134,7 @@ class Tracks
 	public void createOverride(String trackName, SearchResult hit)
 	{
 		executor.submit(() -> createOverride(
-			new TrackOverride(trackName, hit.id, false,
+			new TrackOverride(trackName, false, 0, hit.id, false,
 				ImmutableMap.of(
 				"Name", hit.getName(),
 				"Duration", Duration.ofSeconds(hit.getDuration()).toString(),
@@ -169,22 +170,53 @@ class Tracks
 		}
 	}
 
-	public TrackOverride getOverride(String name)
+	public TrackOverride[] getOverride(String name)
 	{
+		log.warn("getOverride called with name=[" + name + "]");
 		TrackOverride override = GSON.fromJson(
 			configMgr.getConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name),
 			TrackOverride.class
 		);
 
-		if (override == null || override.getPaths().anyMatch(Files::exists))
-		{
-			return override;
-		}
-		else
-		{
-			log.warn("Deleting: " + override + " because there was no override file for it.");
-			configMgr.unsetConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name);
+		if (override == null){
+			log.warn("NO OVERRIDE FOUND for [" + name + "]");
 			return null;
+		}
+		log.warn("OVERRIDE FOUND for [" + name + "], multiTrack=" + override.isMultiTrack());
+
+		if(!override.isMultiTrack()){
+			if (override.getPaths().anyMatch(Files::exists))
+			{
+				return new TrackOverride[]{override};
+			}
+			else
+			{
+				log.warn("Deleting: " + override + " because there was no override file for it.");
+				configMgr.unsetConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name);
+				return null;
+			}
+		} else {
+			List<TrackOverride> overrides = new ArrayList<>();
+			for (int i = 0; i < 3; i++)
+			{
+				String suffix = i == 0 ? "" : "_" + (i + 1);
+				TrackOverride slot = i == 0 ? override : GSON.fromJson(
+					configMgr.getConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name + suffix),
+					TrackOverride.class
+				);
+
+				if (slot == null) continue;
+
+				if (slot.getPaths().anyMatch(Files::exists))
+				{
+					overrides.add(slot);
+				}
+				else
+				{
+					configMgr.unsetConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name + suffix);
+				}
+			}
+			return overrides.isEmpty() ? null : overrides.toArray(new TrackOverride[0]);
 		}
 	}
 
@@ -197,17 +229,21 @@ class Tracks
 	}
 
 	public void removeOverride(String name) {
-		TrackOverride override = getOverride(name);
-		if (override == null) return;
+		TrackOverride[] overrides = getOverride(name);
+		if (overrides == null) return;
 
-		configMgr.unsetConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name);
-		override.getPaths().forEach(overridePath -> {
-			try {
-				Files.deleteIfExists(overridePath);
-			} catch (IOException e) {
-				log.warn("Couldn't delete " + name, e);
-			}
-		});
+		for (int i = 0; i < overrides.length; i++)
+		{
+			String suffix = i == 0 ? "" : "_" + (i + 1);
+			configMgr.unsetConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name + suffix);
+			overrides[i].getPaths().forEach(overridePath -> {
+				try {
+					Files.deleteIfExists(overridePath);
+				} catch (IOException e) {
+					log.warn("Couldn't delete " + name, e);
+				}
+			});
+		}
 	}
 
 	private Path transfer(TrackOverride override)
