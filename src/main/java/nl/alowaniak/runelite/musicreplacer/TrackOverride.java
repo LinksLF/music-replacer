@@ -35,6 +35,7 @@ class TrackOverride
 	 */
 	public Stream<Path> getPaths()
 	{
-		return MusicPlayer.PLAYER_PER_EXT.keySet().stream().map(e -> Tracks.MUSIC_OVERRIDES_DIR.toPath().resolve(name + e));
+		String baseName = multiTrack ? name + "_" + slot : name;
+		return MusicPlayer.PLAYER_PER_EXT.keySet().stream().map(e -> Tracks.MUSIC_OVERRIDES_DIR.toPath().resolve(baseName + e));
 	}
 }

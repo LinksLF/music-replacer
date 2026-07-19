@@ -26,8 +26,11 @@ import net.runelite.client.plugins.music.MusicConfig;
 import net.runelite.client.plugins.music.MusicPlugin;
 import net.runelite.client.ui.overlay.tooltip.Tooltip;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
+import net.runelite.client.events.ConfigChanged;
+import net.runelite.api.gameval.InterfaceID;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -38,6 +41,7 @@ import java.util.concurrent.Executors;
 
 import static nl.alowaniak.runelite.musicreplacer.TracksOverridesUi.NORMAL_FONT;
 import static nl.alowaniak.runelite.musicreplacer.TracksOverridesUi.OVERRIDE_FONT;
+import static nl.alowaniak.runelite.musicreplacer.MusicReplacerConfig.CONFIG_GROUP;
 
 @Slf4j
 @PluginDescriptor(
@@ -54,8 +58,6 @@ public class MusicReplacerPlugin extends Plugin
 
 	public static final String MUSIC_REPLACER_API = "https://alowan.nl/runelite-music-replacer/";
 	public static final String MUSIC_REPLACER_EXECUTOR = "musicReplacerExecutor";
-	public static final int PLAYING_WIDGET_ID = 8;
-	public static final int CURRENTLY_PLAYING_WIDGET_ID = 9;
 
 	private static final int MUSIC_LOOP_STATE_VAR_ID = 4137;
 	private static final double MAX_VOL = 255;
@@ -80,21 +82,27 @@ public class MusicReplacerPlugin extends Plugin
 	private Tracks tracks;
 	@Inject
 	private TracksOverridesUi tracksOverridesUi;
+	@Inject
+	@Named(MUSIC_REPLACER_EXECUTOR)
+	private ExecutorService executor;
 
 	@Inject
 	private MusicConfig musicConfig;
 	@Inject
 	private MusicReplacerConfig config;
 
-	private MusicPlayer player;
+	private volatile MusicPlayer player;
 	private String actualCurTrack;
+	private String lastCurTrack;
 	private boolean restoreActualCurTrack;
 	private TrackOverride[] listofTracks;
 	private TrackOverride trackToPlay;
 	private int[] shuffleOrder;
-	private int curSlot; 
+	private int curSlot;
 
 	private double fading;
+	private int cachedRealVolume = 255;
+	private double oldVolume = -1;
 
 	@Override
 	protected void startUp()
@@ -110,6 +118,15 @@ public class MusicReplacerPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onConfigChanged(ConfigChanged configChanged)
+	{
+		if (CONFIG_GROUP.equals(configChanged.getGroup()) && configChanged.getKey().startsWith(Tracks.OVERRIDE_CONFIG_KEY_PREFIX))
+		{
+			lastCurTrack = null; // force re-evaluation next tick
+		}
+	}
+
+	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
 		if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN)
@@ -118,12 +135,16 @@ public class MusicReplacerPlugin extends Plugin
 		}
 	}
 
-	private double oldVolume = -1;
 	@Subscribe
 	public void onClientTick(ClientTick tick)
 	{
-		Widget curTrackWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
-		Widget playingWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, PLAYING_WIDGET_ID);
+		if (player == null && fading <= 0)
+		{
+			cachedRealVolume = client.getMusicVolume();
+		}
+
+		Widget curTrackWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TEXT);
+		Widget playingWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TITLE);
 		if (curTrackWidget == null || playingWidget == null) return;
 
 		String curTrack = curTrackWidget.getText();
@@ -154,40 +175,43 @@ public class MusicReplacerPlugin extends Plugin
 			applyVolume();
 		}
 
-		TrackOverride[] listofTracks = tracks.getOverride(curTrack);
-		TrackOverride newTrack;
+		if (!Objects.equals(curTrack, lastCurTrack))
+		{
+			lastCurTrack = curTrack;
+			listofTracks = tracks.getOverride(curTrack);
+			TrackOverride newTrack;
 
-		if (listofTracks == null)
-		{
-			newTrack = null;
-		}
-		else if (listofTracks.length > 1)
-		{
-			shuffleOrder = new int[listofTracks.length];
-			for (int i = 0; i < shuffleOrder.length; i++) shuffleOrder[i] = i;
-			Random rand = new Random();
-			for (int i = shuffleOrder.length - 1; i > 0; i--)
+			if (listofTracks == null)
 			{
-				int j = rand.nextInt(i + 1);
-				int temp = shuffleOrder[i];
-				shuffleOrder[i] = shuffleOrder[j];
-				shuffleOrder[j] = temp;
+				newTrack = null;
 			}
-			curSlot = 0;
-			newTrack = listofTracks[shuffleOrder[0]];
-		}
-		else
-		{
-			shuffleOrder = null;
-			newTrack = listofTracks[0];
-		}
+			else if (listofTracks.length > 1)
+			{
+				shuffleOrder = new int[listofTracks.length];
+				for (int i = 0; i < shuffleOrder.length; i++) shuffleOrder[i] = i;
+				Random rand = new Random();
+				for (int i = shuffleOrder.length - 1; i > 0; i--)
+				{
+					int j = rand.nextInt(i + 1);
+					int temp = shuffleOrder[i];
+					shuffleOrder[i] = shuffleOrder[j];
+					shuffleOrder[j] = temp;
+				}
+				curSlot = 0;
+				newTrack = listofTracks[shuffleOrder[0]];
+			}
+			else
+			{
+				shuffleOrder = null;
+				newTrack = listofTracks[0];
+			}
 
-		if (!Objects.equals(trackToPlay, newTrack))
-		{
-			trackToPlay = newTrack;
-			if (fading <= 0) fading = 1;
+			if (!Objects.equals(trackToPlay, newTrack))
+			{
+				trackToPlay = newTrack;
+				if (fading <= 0) fading = 1;
+			}
 		}
-
 
 		if (fading > 0)
 		{
@@ -206,7 +230,7 @@ public class MusicReplacerPlugin extends Plugin
 			{
 				restoreActualCurTrack = true;
 			}
-			else if ((oldVolume <= 0 && volume > 0) || (!player.isPlaying() && client.getVarbitValue(MUSIC_LOOP_STATE_VAR_ID) == 1))
+			else if ((oldVolume <= 0 && volume > 0) || (!player.isPlaying() && (client.getVarbitValue(MUSIC_LOOP_STATE_VAR_ID) == 1 || (shuffleOrder != null && shuffleOrder.length > 1))))
 			{
 				// Restart play if
 				// we switched from muted to on (mimic osrs behavior)
@@ -219,7 +243,7 @@ public class MusicReplacerPlugin extends Plugin
 				}
 				else
 				{
-					player.play();
+					startPlayerSafe(player);
 				}
 			}
 
@@ -228,14 +252,21 @@ public class MusicReplacerPlugin extends Plugin
 		}
 	}
 
-	private void stopCurrentAndStartNew() {
+	private void stopCurrentAndStartNew() 
+	{
 		stopPlaying();
 
-		if (trackToPlay != null)
+		TrackOverride toPlay = trackToPlay;
+		if (toPlay == null)
 		{
+			applyVolume();
+			return;
+		}
+
+		executor.submit(() -> {
 			try
 			{
-				player = trackToPlay.getPaths()
+				MusicPlayer newPlayer = toPlay.getPaths()
 						.filter(Files::exists)
 						.map(Path::toUri)
 						.map(MusicPlayer::create)
@@ -243,32 +274,27 @@ public class MusicReplacerPlugin extends Plugin
 						.findFirst()
 						.orElse(null);
 
-				log.warn("Player created: " + (player != null ? "YES" : "NO") + ", trackToPlay: " + trackToPlay);
-
-				if (player != null) {
-					// Set volume before playing
-					double volume = (client.getMusicVolume() - 1) / MAX_VOL;
-					player.setVolume(volume);
-					player.play();
-					log.warn("Player.play() called");
+				if (newPlayer != null)
+				{
+					double volume = Math.max((cachedRealVolume - 1) / MAX_VOL, 0);
+					newPlayer.setVolume(0);
+					newPlayer.play();
+					newPlayer.setVolume(volume);
+					player = newPlayer;
 				}
-				else {
-					chatMsg("Deleting " + trackToPlay + " override because no player could be made (no file or wrong format?).");
-					tracks.removeOverride(trackToPlay.getName());
+				else
+				{
+					chatMsg("Deleting " + toPlay + " override because no player could be made (no file or wrong format?).");
+					tracks.removeOverride(toPlay.getName());
 				}
 			}
 			catch (OutOfMemoryError e)
 			{
-				log.warn("Out of memory when loading " + trackToPlay, e);
+				log.warn("Out of memory when loading " + toPlay, e);
 				trackToPlay = null;
 			}
-		}
-		else
-		{
-			log.warn("trackToPlay is null");
-		}
-
-		applyVolume();
+			applyVolume();
+		});
 	}
 
 	private void applyVolume()
@@ -284,18 +310,33 @@ public class MusicReplacerPlugin extends Plugin
 
 		if (player == null)
 		{
-			int volume = (int) ((client.getMusicVolume() - 1) * multiplier);
+			int volume = (int) ((cachedRealVolume - 1) * multiplier);
 			clientThread.invokeLater(() -> client.setMusicVolume(Ints.constrainToRange(volume, 0, (int) MAX_VOL)));
 		}
 		else
 		{
 			if (player.isPlaying())
 			{
-				double volume = Doubles.constrainToRange((client.getMusicVolume() - 1) / MAX_VOL * multiplier, 0, 1);
+				double volume = Doubles.constrainToRange((cachedRealVolume - 1) / MAX_VOL * multiplier, 0, 1);
 				player.setVolume(volume);
 			}
 			clientThread.invokeLater(() -> client.setMusicVolume(0));
 		}
+	}
+
+	private void startPlayerSafe(MusicPlayer player) 
+	{
+		if (player == null) return;
+		// Read the user's current music volume (0 = muted, 255 = max)
+		double targetVolume = (client.getMusicVolume() - 1) / MAX_VOL;
+		if (targetVolume < 0) targetVolume = 0;
+
+		// 1. Set volume to 0 to prevent any pop
+		player.setVolume(0);
+		// 2. Start playback silently
+		player.play();
+		// 3. Immediately set the correct volume
+		player.setVolume(targetVolume);
 	}
 
 	public void stopPlaying()
@@ -308,24 +349,6 @@ public class MusicReplacerPlugin extends Plugin
 		}
 	}
 
-	public void forceRefreshCurrentTrack()
-	{
-		clientThread.invoke(() -> {
-			Widget curTrackWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
-			if (curTrackWidget == null) return;
-			String curTrack = curTrackWidget.getText();
-			if (Strings.isNullOrEmpty(curTrack)) return;
-			
-			// Force the plugin to re-evaluate the current track
-			TrackOverride[] overrides = tracks.getOverride(curTrack);
-			if (overrides != null) {
-				trackToPlay = overrides[0];
-				if (fading <= 0) fading = 1;
-				stopCurrentAndStartNew();
-			}
-		});
-	}
-
 	@Override
 	protected void shutDown()
 	{
@@ -336,8 +359,8 @@ public class MusicReplacerPlugin extends Plugin
 		clientThread.invoke(() ->
 		{
 			applyVolume();
-			Widget curTrackWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
-			Widget playingWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, PLAYING_WIDGET_ID);
+			Widget curTrackWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TEXT);
+			Widget playingWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TITLE);
 			if (curTrackWidget == null || playingWidget == null) return;
 			if (!Strings.isNullOrEmpty(actualCurTrack)) curTrackWidget.setText(actualCurTrack);
 			playingWidget.setFontId(NORMAL_FONT);
