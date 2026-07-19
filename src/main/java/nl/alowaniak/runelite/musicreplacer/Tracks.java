@@ -160,11 +160,18 @@ class Tracks
 						}
 					});
 
+			String trackJson = GSON.toJson(override);
 			configMgr.setConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + override.getName(), GSON.toJson(override));
+
+			log.warn("SAVED OVERRIDE for [" + override.getName() + "]: " + trackJson);
 			musicReplacer.chatMsg(override.isFromLocal()
 							? "Overridden " + override.getName()
 							: "Overridden " + override.getName() + ", uploaded by " + override.getAdditionalInfo().get("Uploader")
 			);
+
+			//Force the plugin to switch to the new override immediately
+        	musicReplacer.forceRefreshCurrentTrack();
+			
 		} else {
 			musicReplacer.chatMsg("Failed to override " + override.getName() + ", check the logs.");
 		}
@@ -172,11 +179,14 @@ class Tracks
 
 	public TrackOverride[] getOverride(String name)
 	{
-		log.warn("getOverride called with name=[" + name + "]");
-		TrackOverride override = GSON.fromJson(
-			configMgr.getConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + name),
-			TrackOverride.class
-		);
+		String configKey = OVERRIDE_CONFIG_KEY_PREFIX + name;
+		String configValue = configMgr.getConfiguration(CONFIG_GROUP, configKey);
+		
+		// ADD THIS DEBUG
+		log.warn("getOverride called with name=[" + name + "], configKey=[" + CONFIG_GROUP + "." + configKey + "]");
+		log.warn("Config value: " + configValue);
+
+		TrackOverride override = GSON.fromJson(configValue, TrackOverride.class);
 
 		if (override == null){
 			log.warn("NO OVERRIDE FOUND for [" + name + "]");
@@ -256,6 +266,12 @@ class Tracks
 	private Path transferLocal(TrackOverride override)
 	{
 		Path path = Paths.get(override.getOriginalPath());
+
+		if (!Files.exists(path)) {
+			log.warn("Source file does not exist: " + path);
+			return null;
+		}
+
 		Path targetPath = override.getPaths()
 				.filter(e -> extensionOf(path).equals(extensionOf(e)))
 				.findFirst().orElse(null);
@@ -269,6 +285,7 @@ class Tracks
 		try
 		{
 			Files.copy(path, targetPath, StandardCopyOption.REPLACE_EXISTING);
+			log.warn("Copied " + path + " to " + targetPath);
 			return targetPath;
 		} catch (IOException e)
 		{

@@ -125,6 +125,7 @@ public class MusicReplacerPlugin extends Plugin
 		Widget curTrackWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
 		Widget playingWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, PLAYING_WIDGET_ID);
 		if (curTrackWidget == null || playingWidget == null) return;
+
 		String curTrack = curTrackWidget.getText();
 		if (Strings.isNullOrEmpty(curTrack)) return;
 
@@ -241,7 +242,16 @@ public class MusicReplacerPlugin extends Plugin
 						.filter(Objects::nonNull)
 						.findFirst()
 						.orElse(null);
-				if (player != null) player.play();
+
+				log.warn("Player created: " + (player != null ? "YES" : "NO") + ", trackToPlay: " + trackToPlay);
+
+				if (player != null) {
+					// Set volume before playing
+					double volume = (client.getMusicVolume() - 1) / MAX_VOL;
+					player.setVolume(volume);
+					player.play();
+					log.warn("Player.play() called");
+				}
 				else {
 					chatMsg("Deleting " + trackToPlay + " override because no player could be made (no file or wrong format?).");
 					tracks.removeOverride(trackToPlay.getName());
@@ -252,6 +262,10 @@ public class MusicReplacerPlugin extends Plugin
 				log.warn("Out of memory when loading " + trackToPlay, e);
 				trackToPlay = null;
 			}
+		}
+		else
+		{
+			log.warn("trackToPlay is null");
 		}
 
 		applyVolume();
@@ -292,6 +306,24 @@ public class MusicReplacerPlugin extends Plugin
 			player.close();
 			player = null;
 		}
+	}
+
+	public void forceRefreshCurrentTrack()
+	{
+		clientThread.invoke(() -> {
+			Widget curTrackWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
+			if (curTrackWidget == null) return;
+			String curTrack = curTrackWidget.getText();
+			if (Strings.isNullOrEmpty(curTrack)) return;
+			
+			// Force the plugin to re-evaluate the current track
+			TrackOverride[] overrides = tracks.getOverride(curTrack);
+			if (overrides != null) {
+				trackToPlay = overrides[0];
+				if (fading <= 0) fading = 1;
+				stopCurrentAndStartNew();
+			}
+		});
 	}
 
 	@Override

@@ -97,6 +97,7 @@ class TracksOverridesUi
 			if (key.contains(lastPlayingTrack))
 			{
 				updateCurrentlyPlayingWidget();
+				musicReplacer.forceRefreshCurrentTrack();
 			}
 		}
 	}
@@ -137,6 +138,10 @@ class TracksOverridesUi
 			if (tracks.getOverride(trackName) != null)
 			{
 				addMenuEntry("Remove override", entry).onClick(e -> tracks.removeOverride(trackName));
+				addMenuEntry("Refresh override", entry).onClick(e -> {
+                musicReplacer.forceRefreshCurrentTrack();
+                musicReplacer.chatMsg("Refreshing override for " + trackName);
+            });
 			}
 		}
 		else if (widgetId == WidgetInfo.FIXED_VIEWPORT_MUSIC_TAB.getId()
