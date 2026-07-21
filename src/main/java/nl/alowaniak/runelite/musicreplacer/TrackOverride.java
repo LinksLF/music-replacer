@@ -45,10 +45,14 @@ class TrackOverride
 	public Stream<Path> getPaths()
 	{
 <<<<<<< HEAD
+<<<<<<< HEAD
 		String baseName = multiTrack ? name + "_" + slot : name;
 		return MusicPlayer.PLAYER_PER_EXT.keySet().stream().map(e -> Tracks.MUSIC_OVERRIDES_DIR.toPath().resolve(baseName + e));
 =======
 		return MusicPlayer.PLAYER_PER_EXT.keySet().stream().map(e -> Tracks.MUSIC_OVERRIDES_DIR.toPath().resolve(fileSystemNormalizedName() + e));
 >>>>>>> upstream/master
+=======
+		return MusicPlayer.PLAYER_PER_EXT.keySet().stream().map(e -> Tracks.MUSIC_OVERRIDES_DIR.toPath().resolve(name + e));
+>>>>>>> parent of 138500f (fix local file single and multitrack overrides)
 	}
 }
