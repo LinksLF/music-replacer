@@ -241,10 +241,10 @@ class TracksOverridesUi
 			int status = fileChooser.showOpenDialog(client.getCanvas());
 			if (status == JFileChooser.APPROVE_OPTION) {
 				File[] songsArray = fileChooser.getSelectedFiles();
-				if (songsArray.length > 3){
-					musicReplacer.chatMsg("Only 3 tracks allowed, ignoring the last " + (songsArray.length - 3) + ".");
+				if (songsArray.length > 5){
+					musicReplacer.chatMsg("Only 5 tracks allowed, ignoring the last " + (songsArray.length - 5) + ".");
 				}
-				for (int i = 0; i < Math.min(songsArray.length, 3); i++) {
+				for (int i = 0; i < Math.min(songsArray.length, 5); i++) {
         			tracks.createOverride(trackName, true, i, songsArray[i].toPath());
     			}
 			}

@@ -140,7 +140,11 @@ public class MusicReplacerPlugin extends Plugin
 	{
 		if (player == null && fading <= 0)
 		{
-			cachedRealVolume = client.getMusicVolume();
+			int liveVolume = client.getMusicVolume();
+			if (liveVolume > 0 || cachedRealVolume == 0)
+			{
+				cachedRealVolume = liveVolume;
+			}
 		}
 
 		Widget curTrackWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TEXT);
@@ -254,16 +258,20 @@ public class MusicReplacerPlugin extends Plugin
 
 	private void stopCurrentAndStartNew() 
 	{
-		stopPlaying();
+		fading = 0;
+		MusicPlayer oldPlayer = player;
+		player = null;
 
 		TrackOverride toPlay = trackToPlay;
 		if (toPlay == null)
 		{
+			if (oldPlayer != null) executor.submit(oldPlayer::close);
 			applyVolume();
 			return;
 		}
 
 		executor.submit(() -> {
+			if (oldPlayer != null) oldPlayer.close();
 			try
 			{
 				MusicPlayer newPlayer = toPlay.getPaths()
