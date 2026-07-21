@@ -3,13 +3,11 @@ package nl.alowaniak.runelite.musicreplacer;
 import com.google.common.primitives.Ints;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
-import net.runelite.api.events.GameTick;
-import net.runelite.api.events.MenuOpened;
-import net.runelite.api.events.VarClientIntChanged;
+import net.runelite.api.events.*;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetID;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -18,7 +16,6 @@ import net.runelite.client.game.chatbox.ChatboxTextMenuInput;
 import net.runelite.client.ui.overlay.tooltip.Tooltip;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 import net.runelite.client.util.Text;
-import net.runelite.api.gameval.InterfaceID;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -36,6 +33,7 @@ import java.util.Arrays;
 
 import static net.runelite.http.api.RuneLiteAPI.GSON;
 import static nl.alowaniak.runelite.musicreplacer.MusicReplacerConfig.CONFIG_GROUP;
+import static nl.alowaniak.runelite.musicreplacer.MusicReplacerPlugin.CURRENTLY_PLAYING_WIDGET_ID;
 import static nl.alowaniak.runelite.musicreplacer.Tracks.OVERRIDE_CONFIG_KEY_PREFIX;
 
 @Slf4j
@@ -46,8 +44,6 @@ class TracksOverridesUi
 
 	public static final int OVERRIDE_FONT = FontID.BOLD_12;
 	public static final int NORMAL_FONT = FontID.PLAIN_12;
-
-	public static final int RESIZABLE_VIEWPORT_BOTTOM_LINE_MUSIC_TAB_ID = 10747946;
 
 	@Inject
 	private Client client;
@@ -71,7 +67,7 @@ class TracksOverridesUi
 	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
-		Widget playingTrackWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TEXT);
+		Widget playingTrackWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
 		if (playingTrackWidget == null) return;
 
 		String playingTrack = playingTrackWidget.getText();
@@ -97,6 +93,7 @@ class TracksOverridesUi
 			if (key.contains(lastPlayingTrack))
 			{
 				updateCurrentlyPlayingWidget();
+				musicReplacer.forceRefreshCurrentTrack();
 			}
 		}
 	}
@@ -104,7 +101,7 @@ class TracksOverridesUi
 	@Subscribe
 	public void onVarClientIntChanged(VarClientIntChanged varClientIntChanged)
 	{
-		if (varClientIntChanged.getIndex() == VarClientInt.INVENTORY_TAB && isOnMusicTab())
+		if (varClientIntChanged.getIndex() == VarClientID.TOPLEVEL_PANEL && isOnMusicTab())
 		{
 			// The widgets could be outdated, just ensure it's updated whenever we go to the music tab
 			// TODO figure out better way of ensuring the tracklist is up to date
@@ -114,7 +111,7 @@ class TracksOverridesUi
 
 	private boolean isOnMusicTab()
 	{
-		return client.getVarcIntValue(VarClientInt.INVENTORY_TAB) == 13;
+		return client.getVarcIntValue(VarClientID.TOPLEVEL_PANEL) == 13;
 	}
 
 	@Subscribe
@@ -124,7 +121,7 @@ class TracksOverridesUi
 		if (entry == null) return;
 
 		int widgetId = entry.getParam1();
-		if (widgetId == InterfaceID.Music.JUKEBOX)
+		if (widgetId == WidgetInfo.MUSIC_TRACK_LIST.getId())
 		{
 			String trackName = Text.removeTags(entry.getTarget());
 			addMenuEntry("Override", entry).onClick(e ->
@@ -137,11 +134,27 @@ class TracksOverridesUi
 			if (tracks.getOverride(trackName) != null)
 			{
 				addMenuEntry("Remove override", entry).onClick(e -> tracks.removeOverride(trackName));
+				addMenuEntry("Refresh override", entry).onClick(e -> {
+                musicReplacer.forceRefreshCurrentTrack();
+                musicReplacer.chatMsg("Refreshing override for " + trackName);
+            });
 			}
 		}
+<<<<<<< HEAD
 		else if (widgetId == InterfaceID.Toplevel.STONE13
+<<<<<<< HEAD
         		|| widgetId == InterfaceID.ToplevelOsrsStretch.STONE13
         		|| widgetId == RESIZABLE_VIEWPORT_BOTTOM_LINE_MUSIC_TAB_ID)
+=======
+				|| widgetId == InterfaceID.ToplevelOsrsStretch.STONE13
+				|| widgetId == InterfaceID.ToplevelPreEoc.STONE13
+                || widgetId == InterfaceID.ToplevelOsm.STONE13)
+>>>>>>> upstream/master
+=======
+		else if (widgetId == WidgetInfo.FIXED_VIEWPORT_MUSIC_TAB.getId()
+				|| widgetId == WidgetInfo.RESIZABLE_VIEWPORT_MUSIC_TAB.getId()
+				|| widgetId == RESIZABLE_VIEWPORT_BOTTOM_LINE_MUSIC_TAB_ID)
+>>>>>>> parent of 138500f (fix local file single and multitrack overrides)
 		{
 			if (!tracks.overriddenTracks().isEmpty())
 			{
@@ -180,7 +193,7 @@ class TracksOverridesUi
 
 	private MenuEntry addMenuEntry(String option, MenuEntry entryForCopy)
 	{
-		return client.createMenuEntry(-1)
+		return client.getMenu().createMenuEntry(-1)
 			.setOption(option)
 			.setTarget(entryForCopy.getTarget())
 			.setType(MenuAction.RUNELITE)
@@ -241,10 +254,10 @@ class TracksOverridesUi
 			int status = fileChooser.showOpenDialog(client.getCanvas());
 			if (status == JFileChooser.APPROVE_OPTION) {
 				File[] songsArray = fileChooser.getSelectedFiles();
-				if (songsArray.length > 3){
-					musicReplacer.chatMsg("Only 3 tracks allowed, ignoring the last " + (songsArray.length - 3) + ".");
+				if (songsArray.length > 5){
+					musicReplacer.chatMsg("Only 5 tracks allowed, ignoring the last " + (songsArray.length - 5) + ".");
 				}
-				for (int i = 0; i < Math.min(songsArray.length, 3); i++) {
+				for (int i = 0; i < Math.min(songsArray.length, 5); i++) {
         			tracks.createOverride(trackName, true, i, songsArray[i].toPath());
     			}
 			}
@@ -282,7 +295,7 @@ class TracksOverridesUi
 	{
 		clientThread.invoke(() ->
 		{
-			Widget trackList = client.getWidget(InterfaceID.Music.JUKEBOX);
+			Widget trackList = client.getWidget(WidgetInfo.MUSIC_TRACK_LIST);
 			if (trackList == null) return;
 			for (Widget e : trackList.getDynamicChildren())
 			{
@@ -292,11 +305,24 @@ class TracksOverridesUi
 		});
 	}
 
+	Tooltip trackInfoTooltip;
+	@Subscribe
+	public void onClientTick(ClientTick tick)
+	{
+		trackInfoTooltip = null;
+	}
+	@Subscribe
+	public void onBeforeRender(BeforeRender event)
+	{
+		if (trackInfoTooltip != null) tooltipManager.add(trackInfoTooltip);
+	}
+
+
 	private void updateCurrentlyPlayingWidget()
 	{
 		clientThread.invoke(() ->
 		{
-			Widget trackPlayingWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TEXT);
+			Widget trackPlayingWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
 			if (trackPlayingWidget == null) return;
 
 			trackPlayingWidget.setOnClickListener((JavaScriptCallback) e -> scrollToTrack(e.getSource().getText()));
@@ -316,10 +342,7 @@ class TracksOverridesUi
 						.forEach(e -> tooltipTxt.append(e.getKey()).append(": ").append(e.getValue()).append("</br>"));
 				Tooltip tooltip = new Tooltip(tooltipTxt.toString());
 
-				trackPlayingWidget.setOnMouseRepeatListener((JavaScriptCallback) e ->
-				{
-					if (!tooltipManager.getTooltips().contains(tooltip)) tooltipManager.add(tooltip);
-				});
+				trackPlayingWidget.setOnMouseRepeatListener((JavaScriptCallback) e -> trackInfoTooltip = tooltip);
 			}
 			else
 			{
@@ -334,7 +357,7 @@ class TracksOverridesUi
 		Widget track = findTrackWidget(name);
 		if (track == null) return;
 
-		Widget scrollContainer = client.getWidget(WidgetInfo.MUSIC_TRACK_SCROLL_CONTAINER);
+		Widget scrollContainer = client.getWidget(InterfaceID.Music.SCROLLABLE);
 		if (scrollContainer == null) return;
 
 		int centralY = track.getRelativeY() + track.getHeight() / 2;
@@ -346,14 +369,14 @@ class TracksOverridesUi
 
 		client.runScript(
 			ScriptID.UPDATE_SCROLLBAR,
-			WidgetInfo.MUSIC_TRACK_SCROLLBAR.getId(),
-			WidgetInfo.MUSIC_TRACK_SCROLL_CONTAINER.getId(),
+			InterfaceID.Music.SCROLLBAR,
+			InterfaceID.Music.SCROLLABLE,
 			newScroll
 		);
 	}
 
 	private Widget findTrackWidget(String name) {
-		Widget trackList = client.getWidget(WidgetInfo.MUSIC_TRACK_LIST);
+		Widget trackList = client.getWidget(InterfaceID.Music.JUKEBOX);
 		if (trackList == null) return null;
 
 		return Stream.of(trackList.getDynamicChildren())
@@ -365,7 +388,7 @@ class TracksOverridesUi
 	{
 		clientThread.invoke(() ->
 		{
-			Widget trackPlayingWidget = client.getWidget(InterfaceID.Music.NOW_PLAYING_TEXT);
+			Widget trackPlayingWidget = client.getWidget(WidgetID.MUSIC_GROUP_ID, CURRENTLY_PLAYING_WIDGET_ID);
 			if (trackPlayingWidget == null) return;
 
 			trackPlayingWidget.setFontId(NORMAL_FONT);
@@ -382,7 +405,7 @@ class TracksOverridesUi
 		lastPlayingTrack = null;
 		clientThread.invoke(() ->
 		{
-			Widget trackList = client.getWidget(WidgetInfo.MUSIC_TRACK_LIST);
+			Widget trackList = client.getWidget(InterfaceID.Music.JUKEBOX);
 			if (trackList == null) return;
 			for (Widget e : trackList.getDynamicChildren())
 			{

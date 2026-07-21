@@ -84,24 +84,24 @@ class Tracks
 	 */
 	public void bulkCreateOverride(Path dirPath)
 	{
+		@Value class PathAndFilename {
+			Path path;
+			@Getter(lazy = true) String filename = path.getFileName().toString().replaceAll("\\..+$", "");
+		}
 		executor.submit(() ->
 		{
 			musicReplacer.chatMsg("Overriding with tracks in " + dirPath + ".");
 			try (Stream<Path> ls = Files.list(dirPath))
 			{
-				ls.filter(path -> {
-					String fileName = path.getFileName().toString();
-					return MusicPlayer.PLAYER_PER_EXT.keySet().stream()
-							.anyMatch(ext -> fileName.endsWith(ext));
-				}).forEach(path -> {
-					String fileName = path.getFileName().toString();
-					String trackName = fileName.substring(0, fileName.lastIndexOf('.'));
-					if (!config.skipAlreadyOverriddenWhenBulkOverride() || !overrideExists(trackName)) {
-						createOverride(trackName, false, 0, path);
-					} else {
-						musicReplacer.chatMsg("Skipping " + trackName + ", already overridden.");
-					}
-				});
+				ls.map(e -> new PathAndFilename(e))
+						// Ideally we filtered only files with an osrs track name, but music track enum is removed, let place responsibility on user
+						.forEach(e -> {
+							if (!config.skipAlreadyOverriddenWhenBulkOverride() || !overrideExists(e.getFilename())) {
+								createOverride(e.getFilename(), false, 0, e.getPath());
+							} else {
+								musicReplacer.chatMsg("Skipping " + e.getFilename() + ", already overridden.");
+							}
+						});
 			}
 			catch (IOException e)
 			{
@@ -160,14 +160,18 @@ class Tracks
 						}
 					});
 
-			String suffix = override.getSlot() == 0 ? "" : "_" + (override.getSlot() + 1);
-			configMgr.setConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + override.getName() + suffix, GSON.toJson(override));
+			String trackJson = GSON.toJson(override);
+			configMgr.setConfiguration(CONFIG_GROUP, OVERRIDE_CONFIG_KEY_PREFIX + override.getName(), GSON.toJson(override));
 
+			log.warn("SAVED OVERRIDE for [" + override.getName() + "]: " + trackJson);
 			musicReplacer.chatMsg(override.isFromLocal()
 							? "Overridden " + override.getName()
 							: "Overridden " + override.getName() + ", uploaded by " + override.getAdditionalInfo().get("Uploader")
 			);
 
+			//Force the plugin to switch to the new override immediately
+        	musicReplacer.forceRefreshCurrentTrack();
+			
 		} else {
 			musicReplacer.chatMsg("Failed to override " + override.getName() + ", check the logs.");
 		}
@@ -177,12 +181,18 @@ class Tracks
 	{
 		String configKey = OVERRIDE_CONFIG_KEY_PREFIX + name;
 		String configValue = configMgr.getConfiguration(CONFIG_GROUP, configKey);
+		
+		// ADD THIS DEBUG
+		log.warn("getOverride called with name=[" + name + "], configKey=[" + CONFIG_GROUP + "." + configKey + "]");
+		log.warn("Config value: " + configValue);
 
 		TrackOverride override = GSON.fromJson(configValue, TrackOverride.class);
 
 		if (override == null){
+			log.warn("NO OVERRIDE FOUND for [" + name + "]");
 			return null;
 		}
+		log.warn("OVERRIDE FOUND for [" + name + "], multiTrack=" + override.isMultiTrack());
 
 		if(!override.isMultiTrack()){
 			if (override.getPaths().anyMatch(Files::exists))
@@ -197,7 +207,7 @@ class Tracks
 			}
 		} else {
 			List<TrackOverride> overrides = new ArrayList<>();
-			for (int i = 0; i < 3; i++)
+			for (int i = 0; i < 5; i++)
 			{
 				String suffix = i == 0 ? "" : "_" + (i + 1);
 				TrackOverride slot = i == 0 ? override : GSON.fromJson(

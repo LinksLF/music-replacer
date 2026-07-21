@@ -1,13 +1,10 @@
 # ![icon](./icon.png) Music Replacer
-Replace OSRS tracks with presets (such as OSRSBeatz or RS3 music) or your own music.
-It also allows you to search the music from youtube.
+Replace OSRS tracks with presets (such as [OSRSBeatz](https://www.youtube.com/@OSRSBeatz) or RS3 music) or your own music.
+It also allows you to search the music from YouTube.
 
 The replaced (or "overridden") tracks will behave like the normal music.
-That is, it'll play whenever the original track would play and volume is controlled by the one in-game.
+That is, they'll play whenever the original track would play and volume is controlled by the in-game volume settings.
 
-❗ **Note**: the [music plugin] is required to be **on** and you must've changed volume through it at least once.
-(Because this plugin uses the [music plugin]'s music volume config item.)
- 
 ## 💁 Usage
 ### Bulk Override
 With bulk override you can replace multiple tracks at once.
@@ -57,7 +54,7 @@ Clicking on the currently playing label will jump to the track in the music list
 ![](./demo-data/jump-to-track.webp)
 
 ### Play overrides to end
-When the `Play overrides to end` config checkbox is on a new track won't be played until the current override is finished.
+When the `Play overrides to end` config checkbox is on, a new track won't be played until the current override is finished.
 Especially useful if you remain in one area with vanilla `Music area mode` on `Modern` because it might end your override tracks prematurely 
 (which happens because osrs thinks the vanilla track is done and starts playing a new one).
 It will practically queue the next track, and when one is queued the `Playing` label on the music tab will become bold and get a hover tooltip for which track is `Up next`.
@@ -71,7 +68,7 @@ For example this also means that when you manually click a track to play it won'
 Currently only `wav` (in CD quality) and `mp3` formats are supported.
 
 ## Attribution
-This project uses the [JaCo mp3 player](http://jacomp3player.sourceforge.net) to play mp3, its source can be found [here](https://sourceforge.net/p/jacomp3player/code/HEAD/tree/).
+This project uses the RuneLite fork of [JaCo mp3 player](http://jacomp3player.sourceforge.net) to play mp3, its source can be found [here](https://github.com/runelite/jaco-mp3).
 The JaCo project is licensed under LGPL which you can find [here](./legal/lgpl-3.0.txt) or otherwise [here](https://www.gnu.org/licenses/lgpl-3.0.en.html).
 In case one wishes to swap out JaCo for something different, one can clone this plugin and implement the [MusicPlayer](./src/main/java/nl/alowaniak/runelite/musicreplacer/MusicPlayer.java) for the mp3 extension.
 
