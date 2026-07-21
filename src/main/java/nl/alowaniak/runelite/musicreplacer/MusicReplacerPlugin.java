@@ -274,14 +274,20 @@ public class MusicReplacerPlugin extends Plugin
 		fading = 0;
 		MusicPlayer oldPlayer = player;
 		player = null;
+<<<<<<< HEAD
 =======
 	private void stopCurrentAndStartNew() {
 		stopPlaying();
 >>>>>>> parent of 138500f (fix local file single and multitrack overrides)
+=======
+>>>>>>> db075e2f68b45953c8f1fa3f19f08e9b37e2d26f
 
 		if (trackToPlay != null)
 		{
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> db075e2f68b45953c8f1fa3f19f08e9b37e2d26f
 			if (oldPlayer != null) executor.submit(oldPlayer::close);
 			applyVolume();
 			return;
@@ -289,8 +295,11 @@ public class MusicReplacerPlugin extends Plugin
 
 		executor.submit(() -> {
 			if (oldPlayer != null) oldPlayer.close();
+<<<<<<< HEAD
 =======
 >>>>>>> parent of 138500f (fix local file single and multitrack overrides)
+=======
+>>>>>>> db075e2f68b45953c8f1fa3f19f08e9b37e2d26f
 			try
 			{
 				player = trackToPlay.getPaths()
