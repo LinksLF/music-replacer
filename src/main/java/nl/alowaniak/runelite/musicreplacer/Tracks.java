@@ -197,7 +197,7 @@ class Tracks
 			}
 		} else {
 			List<TrackOverride> overrides = new ArrayList<>();
-			for (int i = 0; i < 3; i++)
+			for (int i = 0; i < 5; i++)
 			{
 				String suffix = i == 0 ? "" : "_" + (i + 1);
 				TrackOverride slot = i == 0 ? override : GSON.fromJson(
